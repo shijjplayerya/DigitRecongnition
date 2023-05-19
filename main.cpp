@@ -1,104 +1,96 @@
 #include<digit.h>
 #include<math.h>
 
+void Start();
 
 int main()
 {
-    Digit digit;
+    Start();
+    while (1) {
+        string command;
+        cout << ">>输入图片名:";
+        cin >> command;
 
-    Mat img = imread("img/8-1.jpg"); //载入图像到test
-    digit.ic.x = img.cols / 2; 
-    digit.ic.y = img.rows / 2;
-    digit.threshold = 20;
-    Mat gray_img; 
-    cvtColor(img, gray_img, COLOR_RGB2GRAY);
-    Mat gauiss_img;
-    GaussianBlur(gray_img, gauiss_img, Size(5, 5), 7.1);
-
-    //Mat erode_img;
-    //erode(gauiss_img, erode_img, 5);
-    Mat threshold_img;
-    threshold(gauiss_img, threshold_img, 200, 255, THRESH_BINARY);
-
-
-
-    Mat kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
-    dilate(threshold_img, threshold_img,kernel);
-
-
-
-    namedWindow("test", WINDOW_NORMAL);
-    imshow("test", threshold_img);
-    //
-    vector<vector<Point>> contours;
-    findContours(threshold_img, contours, 1,1);
-    drawContours(img, contours, -1, (0, 0, 255));
-
-    digit.num = contours.size();
-    img.at<Vec3b>(digit.ic)[0] = 255;
-    img.at<Vec3b>(digit.ic)[1] = 0;
-    img.at<Vec3b>(digit.ic)[2] = 0;
-
-    Rect a;
-    double dis = 10000;
-    for (int i = 0; i < contours.size(); i++) {
-   
-        a = boundingRect(contours[i]);
-        digit.p[i].x = a.x + a.width / 2;
-        digit.p[i].y = a.y + a.height / 2;
-        cout << digit.p[i].x<<" " << digit.p[i].y << endl;
-        //寻找中心点坐标
-
-        if (dis > pow(digit.p[i].x - digit.ic.x, 2) + pow(digit.p[i].y - digit.ic.y, 2)) {
-            dis = pow(digit.p[i].x - digit.ic.x, 2) + pow(digit.p[i].y - digit.ic.y, 2);
-            digit.c.x = digit.p[i].x;
-            digit.c.y = digit.p[i].y;
+        if (command == "stop") {
+            return 1;
         }
 
-        rectangle(img, a, (255, 0, 0));
+        /*1.载入图像到img*/
+        Mat img = imread("img/" + command + ".jpg");
+        if (img.data == NULL) {
+            cout << "error: 图片不存在鸭" << endl;
+            cout << endl;
+            continue;
+        }
+        //初始化类digit
+        Digit digit(img);
 
-        img.at<Vec3b>(digit.p[i]) = (255, 0, 0);
+        /*2.预处理*/
+        //灰度处理和高斯模糊
+        Mat gray_img, gauiss_img;
+        cvtColor(img, gray_img, COLOR_RGB2GRAY);
+        GaussianBlur(gray_img, gauiss_img, Size(3, 3), 1.1);
+
+        //二值化
+        Mat threshold_img;
+        threshold(gauiss_img, threshold_img, 200, 255, THRESH_BINARY);
+
+        //先膨胀处理,后腐蚀处理
+        Mat kernel1 = getStructuringElement(MORPH_RECT, Size(4, 4));
+        dilate(threshold_img, threshold_img, kernel1);
+        Mat kernel2 = getStructuringElement(MORPH_RECT, Size(13, 13));
+        erode(threshold_img, threshold_img, kernel2);
+
+        namedWindow("test", WINDOW_NORMAL);
+        imshow("test", threshold_img);
+
+        /*3.提取数码管中心点*/
+        //检测封闭区域,也就是检测高亮数码管的个数
+        vector<vector<Point>> contours;
+        findContours(threshold_img, contours, 1, 1);
+        drawContours(img, contours, -1, (0, 0, 255));
+
+        img.at<Vec3b>(digit.ic)[0] = 255;
+        img.at<Vec3b>(digit.ic)[1] = 0;
+        img.at<Vec3b>(digit.ic)[2] = 0;
+
+        //提取高亮数码管中心点位置
+        digit.FindPoint(contours,img);
+
+        img.at<Vec3b>(digit.c)[0] = 0;
+        img.at<Vec3b>(digit.c)[1] = 0;
+        img.at<Vec3b>(digit.c)[2] = 0;
+
+        namedWindow("result", WINDOW_NORMAL);
+        imshow("result", img);
+
+        /*4.提取特征向量*/
+        if (digit.IsOneFourSevenEight()) {
+            digit.Printme();
+        }
+        else {
+            digit.GetFeature();
+
+            digit.IsNumber();//对比特征向量
+            digit.Printme();//打印高亮管个数, 特征向量和检测结果到命令窗口
+        }
+        //digit.GetFeature();
+
+        //digit.IsNumber();//对比特征向量
+        //digit.Printme();//打印高亮管个数, 特征向量和检测结果到命令窗口
+        
+        cout << "info: 在图片窗口按下任意键,以继续" << endl;
+        cout << endl;
+        waitKey(0);
+        destroyAllWindows();
     }
+}
 
-    img.at<Vec3b>(digit.c)[0] = 0;
-    img.at<Vec3b>(digit.c)[1] = 0;
-    img.at<Vec3b>(digit.c)[2] = 255;
-    //
-    //for (int i = 0; i < digit.num; i++) {
-    //    if (digit.p[i].y > digit.c.y) {
-    //        digit.p_info[i][0] = DOWN;
-    //    }
-    //    else if (digit.p[i].y < digit.c.y) {
-    //        digit.p_info[i][0] = UP;
-    //    }
-    //    //
-    //    if (digit.p[i].x < digit.c.x - digit.threshold) {
-    //        digit.p_info[i][1] = Left;
-    //    }
-    //    else if (digit.p[i].x > digit.c.x + digit.threshold) {
-    //        digit.p_info[i][1] = Right;
-    //    }
-    //    else {
-    //        digit.p_info[i][1] = Middle;
-    //    }     
-    //}
-    digit.Where();
+void Start() {
+    cout << "-------zzz的结课作业-------" << endl;
+    cout << "Ctrl+C 关闭程序" << endl;
+    cout << "stop 关闭程序" << endl;
 
-    int c = 4;
-    cout << digit.p[c].x << " " << digit.p[c].y << endl;
-    cout << digit.p_info[c][0] << " " << digit.p_info[c][1] << endl;
-
-    img.at<Vec3b>(digit.p[c])[0] = 0;
-    img.at<Vec3b>(digit.p[c])[1] = 0;
-    img.at<Vec3b>(digit.p[c])[2] = 255;
-
-
-    digit.IsOneFourSevenEight();
-
-
-    namedWindow("result", WINDOW_NORMAL);
-    imshow("result", img);
-    
-    waitKey(0);
-    return 0;
+    cout << "Info: 注意对照读取图片的路径" << endl;
+    cout << endl;
 }
